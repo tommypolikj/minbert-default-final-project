@@ -48,7 +48,7 @@ class BertSelfAttention(nn.Module):
 
     bs, hs, seq_len, dk = key.shape
     S = query @ key.transpose(-2, -1) / math.sqrt(dk)
-    S = S.masked_fill(attention_mask == 0, -1e10)  # bs*num_attention_heads*seq_len*seq_len
+    S = S.masked_fill(attention_mask != 0, -1e10)  # bs*num_attention_heads*seq_len*seq_len
     S = F.softmax(S, dim=-1)
     S = self.dropout(S)
     V = S @ value  # bs*num_attention_heads*seq_len*attention_head_size
