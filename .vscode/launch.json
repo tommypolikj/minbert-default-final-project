@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "sanity_check.py",
+            "name": "adam",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "optimizer_test.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }
