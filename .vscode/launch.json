@@ -8,7 +8,7 @@
             "name": "sanity_check.py",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "sanity_check.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }
