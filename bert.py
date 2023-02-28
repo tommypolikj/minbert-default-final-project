@@ -46,12 +46,13 @@ class BertSelfAttention(nn.Module):
     # multiply the attention scores to the value and get back V'
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
-    bs, seq_len, _, dk = key.shape
+    bs, hs, seq_len, dk = key.shape
     S = query @ key.transpose(-2, -1) / math.sqrt(dk)
     S = S.masked_fill(attention_mask == 0, -1e10)  # bs*num_attention_heads*seq_len*seq_len
     S = F.softmax(S, dim=-1)
     V = S @ value  # bs*num_attention_heads*seq_len*attention_head_size
-    V = V.transpose(1, 2).view(bs, seq_len, self.all_head_size)
+    V = V.transpose(1, 2).contiguous().view(bs, seq_len, hs * dk)
+    return V
 
   def forward(self, hidden_states, attention_mask):
     """
