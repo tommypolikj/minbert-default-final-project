@@ -54,7 +54,6 @@ class MultitaskBERT(nn.Module):
         ### TODO
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
-        self.paraphrase_linear = nn.Linear()
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
 
     def forward(self, input_ids, attention_mask):
