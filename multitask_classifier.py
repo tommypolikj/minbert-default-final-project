@@ -52,8 +52,10 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
-        raise NotImplementedError
-
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        self.sentiment_linear = nn.Linear(config.hidden_size, 5)
+        self.paraphrase_linear = nn.Linear()
+        self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
 
     def forward(self, input_ids, attention_mask):
         'Takes a batch of sentences and produces embeddings for them.'
@@ -62,8 +64,9 @@ class MultitaskBERT(nn.Module):
         # When thinking of improvements, you can later try modifying this
         # (e.g., by adding other layers).
         ### TODO
-        raise NotImplementedError
-
+        bert_out = self.bert(input_ids, attention_mask)['pooler_output']
+        out = self.dropout(bert_out)
+        return out
 
     def predict_sentiment(self, input_ids, attention_mask):
         '''Given a batch of sentences, outputs logits for classifying sentiment.
@@ -72,8 +75,9 @@ class MultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''
         ### TODO
-        raise NotImplementedError
-
+        out = self.forward(input_ids, attention_mask)
+        out = self.sentiment_linear(out)
+        return out
 
     def predict_paraphrase(self,
                            input_ids_1, attention_mask_1,
@@ -83,7 +87,9 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        out_1 = self.forward(input_ids_1, attention_mask_1)
+        out_2 = self.forward(input_ids_2, attention_mask_2)
+        return self.cos_similarity(out1, out2)
 
 
     def predict_similarity(self,
@@ -94,7 +100,9 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        out_1 = self.forward(input_ids_1, attention_mask_1)
+        out_2 = self.forward(input_ids_2, attention_mask_2)
+        return self.cos_similarity(out1, out2)
 
 
 
