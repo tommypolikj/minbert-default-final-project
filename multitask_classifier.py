@@ -88,7 +88,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.cos_similarity(out1, out2)
+        return self.cos_similarity(out_1, out_2)
 
 
     def predict_similarity(self,
@@ -101,7 +101,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.cos_similarity(out1, out2)
+        return self.cos_similarity(out_1, out_2)
 
 
 
