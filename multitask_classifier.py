@@ -138,16 +138,16 @@ def train_multitask(args):
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
 
-    para_train_data = SentenceClassificationDataset(para_train_data, args)
-    para_dev_data = SentenceClassificationDataset(para_dev_data, args)
+    para_train_data = SentencePairDataset(para_train_data, args)
+    para_dev_data = SentencePairDataset(para_dev_data, args)
     
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size= len(para_train_data) // sst_batch_num,
                                       collate_fn=para_train_data.collate_fn)
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size= len(para_train_data) // sst_batch_num,
                                       collate_fn=para_dev_data.collate_fn)
     
-    sts_train_data = SentenceClassificationDataset(sts_train_data, args)
-    sts_dev_data = SentenceClassificationDataset(sts_dev_data, args)
+    sts_train_data = SentencePairDataset(sts_train_data, args)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args)
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
                                       collate_fn=sts_train_data.collate_fn)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
@@ -170,15 +170,31 @@ def train_multitask(args):
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
-    def forward_prop(batch, batch_size):
-        b_ids, b_mask, b_labels = (batch['token_ids'],
-                                       batch['attention_mask'], batch['labels'])
+    def forward_prop(batch, batch_size, pair_data=False):
+        if pair_data:
+            b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
+                                        batch['attention_mask_1'], batch['labels'])
 
-        b_ids = b_ids.to(device)
-        b_mask = b_mask.to(device)
-        b_labels = b_labels.to(device)
-        logits = model.predict_sentiment(b_ids, b_mask)
-        loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
+            b_ids_1 = b_ids_1.to(device)
+            b_mask_1 = b_mask_1.to(device)
+            b_labels = b_labels.to(device)
+
+            b_ids_2, b_mask_2 = (batch['token_ids_2'],
+                                        batch['attention_mask_2'])
+
+            b_ids_2 = b_ids_2.to(device)
+            b_mask_2 = b_mask_2.to(device)
+            logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            loss = F.cosine_embedding_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
+        else:
+            b_ids, b_mask, b_labels = (batch['token_ids'],
+                                        batch['attention_mask'], batch['labels'])
+
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+            b_labels = b_labels.to(device)
+            logits = model.predict_sentiment(b_ids, b_mask)
+            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
         return loss
     
     # Run for the specified number of epochs
@@ -188,8 +204,9 @@ def train_multitask(args):
         num_batches = 0
         for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            loss = forward_prop(sst_batch, batch_size=len(sst_batch)) + forward_prop(para_batch, batch_size=len(para_batch)) \
-                 + forward_prop(sts_batch, batch_size=len(sts_batch))
+            loss = forward_prop(sst_batch, batch_size=len(sst_batch), pair_data=False) \
+                 + forward_prop(para_batch, batch_size=len(para_batch), pair_data=True) \
+                 + forward_prop(sts_batch, batch_size=len(sts_batch), pair_data=True)
             loss.backward()
             optimizer.step()
 
