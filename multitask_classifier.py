@@ -101,7 +101,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.cos_similarity(out_1, out_2)
+        return self.cos_similarity(out_1, out_2) * 5  # Scale it to 0-5
 
 
 
@@ -185,7 +185,7 @@ def train_multitask(args):
             b_ids_2 = b_ids_2.to(device)
             b_mask_2 = b_mask_2.to(device)
             logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-            loss = F.cosine_embedding_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
+            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
