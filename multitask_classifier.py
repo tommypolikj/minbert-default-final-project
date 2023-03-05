@@ -13,7 +13,7 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import model_eval_sst, model_eval_multitask, test_model_multitask
 
 
 TQDM_DISABLE=True
@@ -129,14 +129,30 @@ def train_multitask(args):
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
     sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
+    # Calculate batch number to make it the same across three tasks
+    sst_batch_num = len(sst_train_data) // args.batch_size
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-
     sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sst_train_data.collate_fn)
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
 
+    para_train_data = SentenceClassificationDataset(para_train_data, args)
+    para_dev_data = SentenceClassificationDataset(para_dev_data, args)
+    
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size= len(para_train_data) // sst_batch_num,
+                                      collate_fn=para_train_data.collate_fn)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size= len(para_train_data) // sst_batch_num,
+                                      collate_fn=para_dev_data.collate_fn)
+    
+    sts_train_data = SentenceClassificationDataset(sts_train_data, args)
+    sts_dev_data = SentenceClassificationDataset(sts_dev_data, args)
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
+                                      collate_fn=sts_train_data.collate_fn)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
+                                      collate_fn=sts_dev_data.collate_fn)
+    
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'num_labels': num_labels,
@@ -153,23 +169,27 @@ def train_multitask(args):
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
 
+    # Helper function to calculate loss given a batch
+    def forward_prop(batch, batch_size):
+        b_ids, b_mask, b_labels = (batch['token_ids'],
+                                       batch['attention_mask'], batch['labels'])
+
+        b_ids = b_ids.to(device)
+        b_mask = b_mask.to(device)
+        b_labels = b_labels.to(device)
+        logits = model.predict_sentiment(b_ids, b_mask)
+        loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
+        return loss
+    
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
         num_batches = 0
-        for batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
-            b_ids, b_mask, b_labels = (batch['token_ids'],
-                                       batch['attention_mask'], batch['labels'])
-
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
-            b_labels = b_labels.to(device)
-
+        for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            logits = model.predict_sentiment(b_ids, b_mask)
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
-
+            loss = forward_prop(sst_batch, batch_size=len(sst_batch)) + forward_prop(para_batch, batch_size=len(para_batch)) \
+                 + forward_prop(sts_batch, batch_size=len(sts_batch))
             loss.backward()
             optimizer.step()
 
@@ -178,8 +198,8 @@ def train_multitask(args):
 
         train_loss = train_loss / (num_batches)
 
-        train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
-        dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
+        train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
