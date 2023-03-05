@@ -194,7 +194,7 @@ def train_multitask(args):
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
             logits = model.predict_sentiment(b_ids, b_mask)
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
+            loss = F.cross_entropy(logits.float(), b_labels.view(-1), reduction='sum') / batch_size
         return loss
     
     # Run for the specified number of epochs
