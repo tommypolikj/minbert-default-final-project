@@ -138,16 +138,16 @@ def train_multitask(args):
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
 
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)
+    para_train_data = SentencePairDataset(para_train_data, args, isRegression=True)
+    para_dev_data = SentencePairDataset(para_dev_data, args, isRegression=True)
     
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size= len(para_train_data) // sst_batch_num,
                                       collate_fn=para_train_data.collate_fn)
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size= len(para_train_data) // sst_batch_num,
                                       collate_fn=para_dev_data.collate_fn)
     
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
+    sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
                                       collate_fn=sts_train_data.collate_fn)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
@@ -185,7 +185,7 @@ def train_multitask(args):
             b_ids_2 = b_ids_2.to(device)
             b_mask_2 = b_mask_2.to(device)
             logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-            loss = F.mse_loss(logits.float(), b_labels.view(-1), reduction='sum') / batch_size
+            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
