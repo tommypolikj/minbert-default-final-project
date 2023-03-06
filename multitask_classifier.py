@@ -170,7 +170,7 @@ def train_multitask(args):
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
-    def forward_prop(batch, batch_size, pair_data=False, regression=False):
+    def forward_prop(batch, pair_data=False, regression=False):
         if pair_data:
             b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
                                         batch['attention_mask_1'], batch['labels'])
@@ -186,9 +186,9 @@ def train_multitask(args):
             b_mask_2 = b_mask_2.to(device)
             logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
             if regression:
-                loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
+                loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean')
             else:
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='sum') / batch_size
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='mean')
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
@@ -197,7 +197,7 @@ def train_multitask(args):
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
             logits = model.predict_sentiment(b_ids, b_mask)
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
+            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
         return loss
     
     # Run for the specified number of epochs
@@ -207,10 +207,9 @@ def train_multitask(args):
         num_batches = 0
         for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            print(len(para_batch))
-            loss = forward_prop(sst_batch, batch_size=len(sst_batch), pair_data=False) \
-                 + forward_prop(para_batch, batch_size=len(para_batch), pair_data=True) \
-                 + forward_prop(sts_batch, batch_size=len(sts_batch), pair_data=True)
+            loss = forward_prop(sst_batch, pair_data=False) \
+                 + forward_prop(para_batch, pair_data=True) \
+                 + forward_prop(sts_batch, pair_data=True, regression=True)
             loss.backward()
             optimizer.step()
 
