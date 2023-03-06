@@ -140,18 +140,17 @@ def train_multitask(args):
 
     para_train_data = SentencePairDataset(para_train_data, args, isRegression=True)
     para_dev_data = SentencePairDataset(para_dev_data, args, isRegression=True)
-    
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size= len(para_train_data) // sst_batch_num,
+    # Note: we only use args.batch_size here to prevent out of memory problem (not using the whole dataset)
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=para_train_data.collate_fn)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size= len(para_train_data) // sst_batch_num,
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
                                       collate_fn=para_dev_data.collate_fn)
     
     sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
     sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
-    # Note: we only use args.batch_size here to prevent out of memory problem (not using the whole dataset)
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= args.batch_size,
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
                                       collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= args.batch_size,
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_dev_data) // sst_batch_num,
                                       collate_fn=sts_dev_data.collate_fn)
     
     # Init model
@@ -208,6 +207,7 @@ def train_multitask(args):
         num_batches = 0
         for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
+            print(len(para_batch))
             loss = forward_prop(sst_batch, batch_size=len(sst_batch), pair_data=False) \
                  + forward_prop(para_batch, batch_size=len(para_batch), pair_data=True) \
                  + forward_prop(sts_batch, batch_size=len(sts_batch), pair_data=True)
