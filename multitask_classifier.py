@@ -189,7 +189,7 @@ def train_multitask(args):
             if regression:
                 loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
             else:
-                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='sum') / batch_size
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
