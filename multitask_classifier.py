@@ -148,9 +148,10 @@ def train_multitask(args):
     
     sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
     sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
+    # Note: we only use args.batch_size here to prevent out of memory problem (not using the whole dataset)
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= args.batch_size,
                                       collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= args.batch_size,
                                       collate_fn=sts_dev_data.collate_fn)
     
     # Init model
@@ -170,7 +171,7 @@ def train_multitask(args):
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
-    def forward_prop(batch, batch_size, pair_data=False):
+    def forward_prop(batch, batch_size, pair_data=False, regression=False):
         if pair_data:
             b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
                                         batch['attention_mask_1'], batch['labels'])
@@ -185,7 +186,10 @@ def train_multitask(args):
             b_ids_2 = b_ids_2.to(device)
             b_mask_2 = b_mask_2.to(device)
             logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-            loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
+            if regression:
+                loss = F.mse_loss(logits, b_labels.view(-1), reduction='sum') / batch_size
+            else:
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / batch_size
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
