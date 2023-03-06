@@ -150,7 +150,7 @@ def train_multitask(args):
     sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
                                       collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_dev_data) // sst_batch_num,
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
                                       collate_fn=sts_dev_data.collate_fn)
     
     # Init model
