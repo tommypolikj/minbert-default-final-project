@@ -55,6 +55,7 @@ class MultitaskBERT(nn.Module):
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
+        self.paraphrase_linear = nn.Linear(config.hidden_size * 2, 1)
 
     def forward(self, input_ids, attention_mask):
         'Takes a batch of sentences and produces embeddings for them.'
@@ -88,7 +89,9 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
+        # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
+        return self.paraphrase_linear(torch.cat(out_1, out_2, dim=1))
+    
 
 
     def predict_similarity(self,
