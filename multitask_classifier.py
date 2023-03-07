@@ -90,7 +90,7 @@ class MultitaskBERT(nn.Module):
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        return self.paraphrase_linear(torch.cat(out_1, out_2, dim=1))
+        return self.paraphrase_linear(torch.cat((out_1, out_2), dim=1))
     
 
 
