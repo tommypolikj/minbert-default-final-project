@@ -88,20 +88,19 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.cos_similarity(out_1, out_2)
+        return torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
 
 
     def predict_similarity(self,
                            input_ids_1, attention_mask_1,
                            input_ids_2, attention_mask_2):
         '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
-        during evaluation, and handled as a logit by the appropriate loss function.
+        Note that your output should be unnormalized (a logit).
         '''
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.cos_similarity(out_1, out_2) * 5  # Scale it to 0-5
+        return (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
 
 
 
@@ -124,7 +123,6 @@ def save_model(model, optimizer, args, config, filepath):
 ## Currently only trains on sst dataset
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-    print(device)
     # Load data
     # Create the data and its corresponding datasets and dataloader
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
@@ -219,7 +217,8 @@ def train_multitask(args):
 
         train_loss = train_loss / (num_batches)
 
-        train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        # train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
 
         if dev_acc > best_dev_acc:
