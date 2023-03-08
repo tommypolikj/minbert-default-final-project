@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 
 from bert import BertModel
 from optimizer import AdamW
+from optimizer import AdamaxW
 from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
@@ -169,7 +170,7 @@ def train_multitask(args):
 
     lr = args.lr
     # Use PCGrad to wrap optimizer for gradient surgery
-    optimizer = PCGrad(AdamW(model.parameters(), lr=lr))
+    optimizer = PCGrad(AdamaxW(model.parameters(), lr=lr))
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
