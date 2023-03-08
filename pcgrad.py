@@ -13,6 +13,9 @@ class PCGrad():
         self._optim, self._reduction = optimizer, reduction
         return
 
+    def state_dict(self):
+        return self._optim.state_dict()
+    
     @property
     def optimizer(self):
         return self._optim
