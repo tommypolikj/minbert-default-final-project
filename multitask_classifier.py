@@ -217,7 +217,7 @@ def train_multitask(args):
             optimizer.pc_backward(losses)
             optimizer.step()
 
-            train_loss += torch.mean(losses)
+            train_loss += np.mean(losses)
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
