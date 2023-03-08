@@ -213,7 +213,6 @@ def train_multitask(args):
             losses = [forward_prop(sst_batch, pair_data=False), 
                       forward_prop(para_batch, pair_data=True),
                       forward_prop(sts_batch, pair_data=True, regression=True)]
-            print(losses)
             optimizer.pc_backward(losses)
             optimizer.step()
 
