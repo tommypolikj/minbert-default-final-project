@@ -145,7 +145,7 @@ def train_multitask(args):
     # Note: we only use args.batch_size here to prevent out of memory problem (not using the whole dataset)
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=para_train_data.collate_fn)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batgich_size,
                                       collate_fn=para_dev_data.collate_fn)
     
     sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
@@ -217,7 +217,7 @@ def train_multitask(args):
             optimizer.pc_backward(losses)
             optimizer.step()
 
-            train_loss += losses.mean()
+            train_loss += torch.mean(losses)
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
