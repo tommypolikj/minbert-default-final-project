@@ -213,11 +213,11 @@ def train_multitask(args):
             losses = [forward_prop(sst_batch, pair_data=False), 
                       forward_prop(para_batch, pair_data=True),
                       forward_prop(sts_batch, pair_data=True, regression=True)]
-
+            print(losses)
             optimizer.pc_backward(losses)
             optimizer.step()
 
-            train_loss += np.mean(losses)
+            train_loss += torch.mean(torch.tensor(losses))
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
