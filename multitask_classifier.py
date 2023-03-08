@@ -14,7 +14,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
 from evaluation import model_eval_sst, model_eval_multitask, test_model_multitask
-
+from pcgrad import PCGrad
 
 TQDM_DISABLE=False
 
@@ -168,7 +168,8 @@ def train_multitask(args):
     model = model.to(device)
 
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    # Use PCGrad to wrap optimizer for gradient surgery
+    optimizer = PCGrad(AdamW(model.parameters(), lr=lr))
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
@@ -209,13 +210,14 @@ def train_multitask(args):
         num_batches = 0
         for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            loss = forward_prop(sst_batch, pair_data=False) \
-                 + forward_prop(para_batch, pair_data=True) \
-                 + forward_prop(sts_batch, pair_data=True, regression=True)
-            loss.backward()
+            losses = [forward_prop(sst_batch, pair_data=False), 
+                      forward_prop(para_batch, pair_data=True),
+                      forward_prop(sts_batch, pair_data=True, regression=True)]
+
+            optimizer.pc_backward(losses)
             optimizer.step()
 
-            train_loss += loss.item()
+            train_loss += losses.mean()
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
