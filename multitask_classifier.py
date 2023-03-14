@@ -171,7 +171,7 @@ def train_multitask(args):
 
     lr = args.lr
     # Use PCGrad to wrap optimizer for gradient surgery
-    optimizer = PCGrad(AdamaxW(model.parameters(), lr=lr))
+    optimizer = PCGrad(AdamW(model.parameters(), lr=lr))
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
@@ -190,7 +190,7 @@ def train_multitask(args):
             b_ids_2 = b_ids_2.to(device)
             b_mask_2 = b_mask_2.to(device)
             
-            emb = (model(b_ids_1, b_mask_1), model(b_ids_2, b_mask_2))
+            if return_emb: emb = (model(b_ids_1, b_mask_1), model(b_ids_2, b_mask_2))
             if regression:
                 logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
                 loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean')
@@ -204,7 +204,7 @@ def train_multitask(args):
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
-            emb = model(b_ids, b_mask)
+            if return_emb: emb = model(b_ids, b_mask)
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
