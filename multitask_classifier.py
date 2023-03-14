@@ -252,7 +252,7 @@ def train_multitask(args):
                 break
 
         train_loss = train_loss / (num_batches)
-        if epoch % 4 == 0:
+        if epoch % 4 == 0 and epoch > 0:
             train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
         train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
