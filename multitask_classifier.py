@@ -10,6 +10,7 @@ from bert import BertModel
 from optimizer import AdamW
 from optimizer import AdamaxW
 from tqdm import tqdm
+from itertools import cycle
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
@@ -152,9 +153,9 @@ def train_multitask(args):
     
     sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
     sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= len(sts_train_data) // sst_batch_num,
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size= args.batch_size,
                                       collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= len(sts_train_data) // sst_batch_num,
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size= args.batch_size,
                                       collate_fn=sts_dev_data.collate_fn)
     
     # Init model
@@ -220,15 +221,25 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
-        for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
+        sst_train_cycle_loader = cycle(sst_train_dataloader)
+        sts_train_cycle_loader = cycle(sts_train_dataloader)
+        # Train on the entire para dataset once, run the other two several times
+        for para_batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
+            # try:
+            #     sts_batch = next(sts_train_dataloader)
+            # except StopIteration:
+            #     sts_train_dataloader = 
+            sst_batch = next(sst_train_cycle_loader)
+            sts_batch = next(sts_train_cycle_loader)
             sst_eval_fn = model.sentiment_linear
             #para_eval_fn = lambda x: forward_prop(x, True, False, return_emb=True)
             #sts_eval_fn = lambda x:forward_prop(x, True, True, return_emb=True)
-            smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
+            #smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
             #smart_loss_para = SMARTLoss(eval_fn=para_eval_fn, loss_fn = sym_kl_loss)
             #smart_loss_sts = SMARTLoss(eval_fn=sts_eval_fn, loss_fn = sym_kl_loss)
-            losses = [forward_prop(sst_batch, pair_data=False) + smart_loss_sst(forward_prop(sst_batch, return_emb=True), forward_prop(sst_batch, return_logits=True)), 
+            # + smart_loss_sst(forward_prop(sst_batch, return_emb=True), forward_prop(sst_batch, return_logits=True))
+            losses = [forward_prop(sst_batch, pair_data=False), 
                       forward_prop(para_batch, pair_data=True),
                       forward_prop(sts_batch, pair_data=True, regression=True)]
             optimizer.pc_backward(losses)
