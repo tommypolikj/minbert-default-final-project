@@ -16,6 +16,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 from evaluation import model_eval_sst, model_eval_multitask, test_model_multitask
 from pcgrad import PCGrad
+from smart_pytorch import SMARTLoss, sym_kl_loss
 
 TQDM_DISABLE=False
 
@@ -79,7 +80,7 @@ class MultitaskBERT(nn.Module):
         out = self.forward(input_ids, attention_mask)
         out = self.sentiment_linear(out)
         return out
-
+    
     def predict_paraphrase(self,
                            input_ids_1, attention_mask_1,
                            input_ids_2, attention_mask_2):
@@ -174,7 +175,7 @@ def train_multitask(args):
     best_dev_acc = 0
 
     # Helper function to calculate loss given a batch
-    def forward_prop(batch, pair_data=False, regression=False):
+    def forward_prop(batch, pair_data=False, regression=False, return_logits=False, return_emb=False):
         if pair_data:
             b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
                                         batch['attention_mask_1'], batch['labels'])
@@ -188,10 +189,13 @@ def train_multitask(args):
 
             b_ids_2 = b_ids_2.to(device)
             b_mask_2 = b_mask_2.to(device)
-            logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
+            
+            emb = (model(b_ids_1, b_mask_1), model(b_ids_2, b_mask_2))
             if regression:
+                logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
                 loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean')
             else:
+                logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
                 loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='mean')
         else:
             b_ids, b_mask, b_labels = (batch['token_ids'],
@@ -200,9 +204,16 @@ def train_multitask(args):
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
+            emb = model(b_ids, b_mask)
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
-        return loss
+
+        if return_logits:
+            return logits
+        elif return_emb:
+            return emb
+        else:
+            return loss
     
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -211,7 +222,13 @@ def train_multitask(args):
         num_batches = 0
         for sst_batch, para_batch, sts_batch in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            losses = [forward_prop(sst_batch, pair_data=False), 
+            sst_eval_fn = model.sentiment_linear
+            #para_eval_fn = lambda x: forward_prop(x, True, False, return_emb=True)
+            #sts_eval_fn = lambda x:forward_prop(x, True, True, return_emb=True)
+            smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
+            #smart_loss_para = SMARTLoss(eval_fn=para_eval_fn, loss_fn = sym_kl_loss)
+            #smart_loss_sts = SMARTLoss(eval_fn=sts_eval_fn, loss_fn = sym_kl_loss)
+            losses = [forward_prop(sst_batch, pair_data=False) + smart_loss_sst(forward_prop(sst_batch, return_emb=True), forward_prop(sst_batch, return_logits=True)), 
                       forward_prop(para_batch, pair_data=True),
                       forward_prop(sts_batch, pair_data=True, regression=True)]
             optimizer.pc_backward(losses)
