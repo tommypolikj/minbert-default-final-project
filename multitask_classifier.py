@@ -93,7 +93,7 @@ class MultitaskBERT(nn.Module):
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1)
+        return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1) + self.cos_similarity(out_1, out_2)
     
 
 
@@ -106,7 +106,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
+        return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
 
 
 
@@ -232,7 +232,7 @@ def train_multitask(args):
             #     sts_train_dataloader = 
             sst_batch = next(sst_train_cycle_loader)
             sts_batch = next(sts_train_cycle_loader)
-            sst_eval_fn = model.sentiment_linear
+            #sst_eval_fn = model.sentiment_linear
             #para_eval_fn = lambda x: forward_prop(x, True, False, return_emb=True)
             #sts_eval_fn = lambda x:forward_prop(x, True, True, return_emb=True)
             #smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
@@ -247,10 +247,12 @@ def train_multitask(args):
 
             train_loss += torch.mean(torch.tensor(losses))
             num_batches += 1
+            if num_batches > 600:
+                break
 
         train_loss = train_loss / (num_batches)
 
-        # train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
         train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
 
