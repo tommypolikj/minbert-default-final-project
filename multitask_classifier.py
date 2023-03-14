@@ -106,6 +106,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
+        # Added a linear layer, better performance on dev set, but more overfitting
         return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
 
 
@@ -251,8 +252,8 @@ def train_multitask(args):
                 break
 
         train_loss = train_loss / (num_batches)
-
-        train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        if epoch % 4 == 0:
+            train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
         train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
 
