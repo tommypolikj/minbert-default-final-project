@@ -65,7 +65,7 @@ class MultitaskBERT(nn.Module):
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
         self.paraphrase_linear = nn.Linear(config.hidden_size * 2, 1)
-        self.smart_weight = 0.05
+        self.smart_weight = config.smart_weight
 
     def forward(self, input_ids, attention_mask):
         'Takes a batch of sentences and produces embeddings for them.'
@@ -95,7 +95,6 @@ class MultitaskBERT(nn.Module):
     
     def predict_paraphrase_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
-        pair_out = self.pair_dropout(pair_out)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
         return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + self.cos_similarity(out_1, out_2)
     
@@ -113,7 +112,6 @@ class MultitaskBERT(nn.Module):
     
     def predict_similarity_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
-        pair_out = self.pair_dropout(pair_out)
         # Added a linear layer, better performance on dev set, but more overfitting
         return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
     
@@ -181,8 +179,8 @@ def train_multitask(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option
-              }
+              'option': args.option,
+              'smart_weight': 0.05}
 
     config = SimpleNamespace(**config)
 
@@ -196,6 +194,7 @@ def train_multitask(args):
 
     # Helper function to calculate loss given a batch
     def forward_prop(batch, pair_data=False, regression=False, return_logits=False, return_emb=False):
+        result = {}
         if pair_data:
             b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
                                         batch['attention_mask_1'], batch['labels'])
@@ -228,12 +227,12 @@ def train_multitask(args):
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
+        result['loss'] = loss
         if return_logits:
-            return logits
-        elif return_emb:
-            return emb
-        else:
-            return loss
+            result['logits'] = logits
+        if return_emb:
+            result['emb'] = emb
+        return result
     
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -249,15 +248,18 @@ def train_multitask(args):
             sts_batch = next(sts_train_cycle_loader)
             # Setup for SMART
             sst_eval_fn = model.predict_sentiment_with_emb
-            para_eval_fn = model.predict_paraphrase_with_emb
-            sts_eval_fn = model.predict_similarity_with_emb
-            #smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
-            #smart_loss_para = SMARTLoss(eval_fn=para_eval_fn, loss_fn = sym_kl_loss)
-            #smart_loss_sts = SMARTLoss(eval_fn=sts_eval_fn, loss_fn = sym_kl_loss)
-            # + smart_loss_sst(forward_prop(sst_batch, return_emb=True), forward_prop(sst_batch, return_logits=True))
-            losses = [forward_prop(sst_batch, pair_data=False), 
-                      forward_prop(para_batch, pair_data=True),
-                      forward_prop(sts_batch, pair_data=True, regression=True)]
+            para_eval_fn = lambda x: model.predict_paraphrase_with_emb(x[0], x[1])
+            sts_eval_fn = lambda x: model.predict_similarity_with_emb(x[0], x[1])
+            smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
+            smart_loss_para = SMARTLoss(eval_fn=para_eval_fn, loss_fn = sym_kl_loss)
+            smart_loss_sts = SMARTLoss(eval_fn=sts_eval_fn, loss_fn = sym_kl_loss)
+
+            sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=True)
+            para_forward = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
+            sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
+            losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
+                      para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
+                      sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
             optimizer.pc_backward(losses)
             optimizer.step()
 
