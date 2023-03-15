@@ -129,7 +129,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        return self.predict_paraphrase_with_emb(out_1, out_2)
+        return self.predict_similarity_with_emb(out_1, out_2)
 
 
 
