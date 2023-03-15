@@ -200,6 +200,7 @@ def train_multitask(args):
     # Helper function to calculate loss given a batch
     def forward_prop(batch, pair_data=False, regression=False, return_logits=False, return_emb=False):
         result = {}
+        emb = None
         if pair_data:
             b_ids_1, b_mask_1, b_labels = (batch['token_ids_1'],
                                         batch['attention_mask_1'], batch['labels'])
@@ -267,9 +268,10 @@ def train_multitask(args):
             #           sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
             losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
             optimizer.pc_backward(losses)
+            
             optimizer.step()
-
             train_loss += torch.mean(torch.tensor(losses))
+            del losses
             num_batches += 1
             if num_batches > 600:
                 break
