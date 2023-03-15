@@ -233,12 +233,12 @@ def train_multitask(args):
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
-        result['loss'] = loss
-        if return_logits:
-            result['logits'] = logits
-        if return_emb:
-            result['emb'] = emb
-        return result
+        # result['loss'] = loss
+        # if return_logits:
+        #     result['logits'] = logits
+        # if return_emb:
+        #     result['emb'] = emb
+        return loss, logits, emb
     
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -259,20 +259,17 @@ def train_multitask(args):
             optimizer.zero_grad()
             sst_batch = next(sst_train_cycle_loader)
             sts_batch = next(sts_train_cycle_loader)
-            sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=True)
-            para_forward = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
-            sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
+            sst_loss, sst_logits, sst_emb = forward_prop(sst_batch, return_emb=True, return_logits=True)
+            para_loss, para_logits, para_emb = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
+            sts_loss, sts_logits, sts_emb = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
             # losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
             #           para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
             #           sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
-            losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
+            losses = [sst_loss, para_loss, sts_loss]  # Without using SMART
             optimizer.pc_backward(losses)
             
             optimizer.step()
             train_loss += torch.mean(torch.tensor(losses))
-            del sst_forward
-            del para_forward
-            del sts_forward
             num_batches += 1
             if num_batches > 600:
                 break
