@@ -65,8 +65,13 @@ class MultitaskBERT(nn.Module):
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
         self.paraphrase_linear = nn.Linear(config.hidden_size * 2, 1)
+        self.similarity_linear = nn.Linear(config.hidden_size * 2, 1)
         self.smart_weight = config.smart_weight
 
+    def freeze_bert_layers(self):
+        for param in self.bert.parameters():
+            param.requires_grad = False
+    
     def forward(self, input_ids, attention_mask):
         'Takes a batch of sentences and produces embeddings for them.'
         # The final BERT embedding is the hidden state of [CLS] token (the first token)
@@ -113,7 +118,7 @@ class MultitaskBERT(nn.Module):
     def predict_similarity_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
         # Added a linear layer, better performance on dev set, but more overfitting
-        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
+        return torch.squeeze(self.similarity_linear(pair_out), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
     
     def predict_similarity(self,
                            input_ids_1, attention_mask_1,
@@ -257,9 +262,10 @@ def train_multitask(args):
             sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=True)
             para_forward = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
             sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
-            losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
-                      para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
-                      sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
+            # losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
+            #           para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
+            #           sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
+            losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
             optimizer.pc_backward(losses)
             optimizer.step()
 
@@ -280,7 +286,77 @@ def train_multitask(args):
             save_model(model, optimizer, args, config, args.filepath)
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    
+    # Freeze the BERT embedding layers and train the linear layers for each task separately
+    print('Freeze the BERT embedding layers and train the linear layers for each task separately')
+    print('------Start training on SST------')
+    model.freeze_bert_layers()
+    # First train sst
+    for epoch in range(args.epochs):
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        for sst_batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            optimizer.zero_grad()
+            loss = forward_prop(sst_batch)['loss']
 
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss = train_loss / (num_batches)
+
+        train_acc = 0
+        dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device, eval_para=False)
+
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+
+
+    print('------Start training on Paraphrase------')
+    for epoch in range(args.epochs):
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        for para_batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            optimizer.zero_grad()
+            loss = forward_prop(para_batch, pair_data=True)['loss']
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+            
+            if num_batches >= 600:
+                break
+        train_loss = train_loss / (num_batches)
+
+        train_acc = 0
+        dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    
+    print('------Start training on STS------')
+    for epoch in range(args.epochs):
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        for sts_batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            optimizer.zero_grad()
+            loss = forward_prop(sts_batch, pair_data=True, regression=True)['loss']
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+            
+        train_loss = train_loss / (num_batches)
+
+        train_acc = 0
+        dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device, eval_para=False)
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
 
 def test_model(args):
