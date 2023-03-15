@@ -48,7 +48,11 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        # Pretrained weights from MLM tasks on training dataset
+        self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
+        # self.bert = BertModel.from_pretrained('bert-base-uncased', config='bert-base-uncased')
+        # print(self.bert.bert_layers[0].attention_dense.weight)
+        # print(self.bert)
         for param in self.bert.parameters():
             if config.option == 'pretrain':
                 param.requires_grad = False
