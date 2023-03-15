@@ -234,10 +234,10 @@ def train_multitask(args):
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
         result['loss'] = loss
-        # if return_logits:
-        #     result['logits'] = logits
-        # if return_emb:
-        #     result['emb'] = emb
+        if return_logits:
+            result['logits'] = logits
+        if return_emb:
+            result['emb'] = emb
         return result
     
     # Run for the specified number of epochs
@@ -270,6 +270,9 @@ def train_multitask(args):
             
             optimizer.step()
             train_loss += torch.mean(torch.tensor(losses))
+            del sst_forward
+            del para_forward
+            del sts_forward
             num_batches += 1
             if num_batches > 600:
                 break
