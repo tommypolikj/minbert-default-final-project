@@ -61,7 +61,7 @@ def model_eval_sst(dataloader, model, device):
 def model_eval_multitask(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device):
+                         model, device, eval_para=True):
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -71,6 +71,7 @@ def model_eval_multitask(sentiment_dataloader,
 
         # Evaluate paraphrase detection.
         for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            if not eval_para: break
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -90,8 +91,10 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
 
-        paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
-
+        if eval_para:
+            paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
+        else:
+            paraphrase_accuracy = 0
         sts_y_true = []
         sts_y_pred = []
         sts_sent_ids = []
@@ -158,7 +161,7 @@ def model_eval_test_multitask(sentiment_dataloader,
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
-
+        
         para_y_pred = []
         para_sent_ids = []
         # Evaluate paraphrase detection.
