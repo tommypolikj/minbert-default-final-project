@@ -49,8 +49,8 @@ class MultitaskBERT(nn.Module):
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
         # Pretrained weights from MLM tasks on training dataset
-        self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
-        # self.bert = BertModel.from_pretrained('bert-base-uncased', config='bert-base-uncased')
+        # self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased', config='bert-base-uncased')
         # print(self.bert.bert_layers[0].attention_dense.weight)
         # print(self.bert)
         for param in self.bert.parameters():
@@ -60,9 +60,12 @@ class MultitaskBERT(nn.Module):
                 param.requires_grad = True
         ### TODO
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        self.sentiment_dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        self.pair_dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
         self.paraphrase_linear = nn.Linear(config.hidden_size * 2, 1)
+        self.smart_weight = 0.05
 
     def forward(self, input_ids, attention_mask):
         'Takes a batch of sentences and produces embeddings for them.'
@@ -74,7 +77,12 @@ class MultitaskBERT(nn.Module):
         bert_out = self.bert(input_ids, attention_mask)['pooler_output']
         out = self.dropout(bert_out)
         return out
-
+    
+    def predict_sentiment_with_emb(self, out):
+        out = self.sentiment_dropout(out)
+        out = self.sentiment_linear(out)
+        return out
+    
     def predict_sentiment(self, input_ids, attention_mask):
         '''Given a batch of sentences, outputs logits for classifying sentiment.
         There are 5 sentiment classes:
@@ -83,8 +91,13 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         out = self.forward(input_ids, attention_mask)
-        out = self.sentiment_linear(out)
-        return out
+        return self.predict_sentiment_with_emb(out)
+    
+    def predict_paraphrase_with_emb(self, out_1, out_2):
+        pair_out = torch.cat((out_1, out_2), dim=1)
+        pair_out = self.pair_dropout(pair_out)
+        # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
+        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + self.cos_similarity(out_1, out_2)
     
     def predict_paraphrase(self,
                            input_ids_1, attention_mask_1,
@@ -96,11 +109,14 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1) + self.cos_similarity(out_1, out_2)
+        return self.predict_paraphrase_with_emb(out_1, out_2)
     
-
-
+    def predict_similarity_with_emb(self, out_1, out_2):
+        pair_out = torch.cat((out_1, out_2), dim=1)
+        pair_out = self.pair_dropout(pair_out)
+        # Added a linear layer, better performance on dev set, but more overfitting
+        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
+    
     def predict_similarity(self,
                            input_ids_1, attention_mask_1,
                            input_ids_2, attention_mask_2):
@@ -110,8 +126,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         out_1 = self.forward(input_ids_1, attention_mask_1)
         out_2 = self.forward(input_ids_2, attention_mask_2)
-        # Added a linear layer, better performance on dev set, but more overfitting
-        return torch.squeeze(self.paraphrase_linear(torch.cat((out_1, out_2), dim=1)), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
+        return self.predict_paraphrase_with_emb(out_1, out_2)
 
 
 
@@ -139,8 +154,6 @@ def train_multitask(args):
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
     sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
-    # Calculate batch number to make it the same across three tasks
-    sst_batch_num = len(sst_train_data) // args.batch_size
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
     sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
@@ -168,7 +181,8 @@ def train_multitask(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option}
+              'option': args.option
+              }
 
     config = SimpleNamespace(**config)
 
@@ -231,15 +245,12 @@ def train_multitask(args):
         # Train on the entire para dataset once, run the other two several times
         for para_batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             optimizer.zero_grad()
-            # try:
-            #     sts_batch = next(sts_train_dataloader)
-            # except StopIteration:
-            #     sts_train_dataloader = 
             sst_batch = next(sst_train_cycle_loader)
             sts_batch = next(sts_train_cycle_loader)
-            #sst_eval_fn = model.sentiment_linear
-            #para_eval_fn = lambda x: forward_prop(x, True, False, return_emb=True)
-            #sts_eval_fn = lambda x:forward_prop(x, True, True, return_emb=True)
+            # Setup for SMART
+            sst_eval_fn = model.predict_sentiment_with_emb
+            para_eval_fn = model.predict_paraphrase_with_emb
+            sts_eval_fn = model.predict_similarity_with_emb
             #smart_loss_sst = SMARTLoss(eval_fn=sst_eval_fn, loss_fn = sym_kl_loss)
             #smart_loss_para = SMARTLoss(eval_fn=para_eval_fn, loss_fn = sym_kl_loss)
             #smart_loss_sts = SMARTLoss(eval_fn=sts_eval_fn, loss_fn = sym_kl_loss)
@@ -258,7 +269,8 @@ def train_multitask(args):
         train_loss = train_loss / (num_batches)
         if epoch % 4 == 0 and epoch > 0:
             train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
-        train_acc = 0
+        else:
+            train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
 
         if dev_acc > best_dev_acc:
