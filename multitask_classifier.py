@@ -276,11 +276,12 @@ def train_multitask(args):
 
         train_loss = train_loss / (num_batches)
         if epoch % 4 == 0 and epoch > 0:
-            train_acc, train_f1, *_ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+            para_acc, _, _, sst_acc, _, _, sts_corr, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+            train_acc = (para_acc + sst_acc + sts_corr) / 3
         else:
             train_acc = 0
-        dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
-
+        para_acc, _, _, sst_acc, _, _, sts_corr, _, _ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
+        dev_acc = (para_acc + sst_acc + sts_corr) / 3
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
