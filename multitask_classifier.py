@@ -233,12 +233,12 @@ def train_multitask(args):
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
-        # result['loss'] = loss
-        # if return_logits:
-        #     result['logits'] = logits
-        # if return_emb:
-        #     result['emb'] = emb
-        return loss, logits, emb
+        result['loss'] = loss
+        if return_logits:
+            result['logits'] = logits
+        if return_emb:
+            result['emb'] = emb
+        return result
     
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
