@@ -262,10 +262,10 @@ def train_multitask(args):
             sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=False)
             para_forward = forward_prop(para_batch, pair_data=True, return_emb=False, return_logits=False)
             sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=False, return_logits=False)
-            # losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
-            #           para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
-            #           sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
-            losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
+            losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
+                      para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
+                      sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
+            # losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
             optimizer.pc_backward(losses)
             
             optimizer.step()
@@ -286,7 +286,8 @@ def train_multitask(args):
             save_model(model, optimizer, args, config, args.filepath)
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
-    
+
+    '''
     # Freeze the BERT embedding layers and train the linear layers for each task separately
     print('Freeze the BERT embedding layers and train the linear layers for each task separately')
     print('------Start training on SST------')
@@ -357,7 +358,7 @@ def train_multitask(args):
         train_acc = 0
         dev_acc, dev_f1, *_ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device, eval_para=False)
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
-
+    '''
 
 def test_model(args):
     with torch.no_grad():
