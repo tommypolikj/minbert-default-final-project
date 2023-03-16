@@ -259,9 +259,9 @@ def train_multitask(args):
             optimizer.zero_grad()
             sst_batch = next(sst_train_cycle_loader)
             sts_batch = next(sts_train_cycle_loader)
-            sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=False)
-            para_forward = forward_prop(para_batch, pair_data=True, return_emb=False, return_logits=False)
-            sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=False, return_logits=False)
+            sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=True)
+            para_forward = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
+            sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
             losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
                       para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
                       sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
