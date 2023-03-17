@@ -101,8 +101,8 @@ class MultitaskBERT(nn.Module):
     def predict_paraphrase_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        # + self.cos_similarity(out_1, out_2)
-        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1)
+        
+        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + self.cos_similarity(out_1, out_2)
     
     def predict_paraphrase(self,
                            input_ids_1, attention_mask_1,
@@ -118,9 +118,8 @@ class MultitaskBERT(nn.Module):
     
     def predict_similarity_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
-        # Added a linear layer, better performance on dev set, but more overfitting
-        # + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
-        return torch.squeeze(self.similarity_linear(pair_out), dim=1)
+        # Added a linear layer, better performance on dev set, but more overfitting 
+        return torch.squeeze(self.similarity_linear(pair_out), dim=1) + (self.cos_similarity(out_1, out_2) + 1) * 5/2  # Scale it to 0-5
     
     def predict_similarity(self,
                            input_ids_1, attention_mask_1,
@@ -228,15 +227,13 @@ def train_multitask(args):
                 # Similarty sts
                 logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
                 # Adding correlation as loss
-                loss = 1 - pearson_corr(logits, b_labels.view(-1)) + \
-                            F.cosine_embedding_loss(emb[0], emb[1], b_labels.view(-1), reduction='mean')
+                loss = 1 - pearson_corr(logits, b_labels.view(-1))
                 # loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean') + \
                 #         F.cosine_embedding_loss(emb[0], emb[1], b_labels.view(-1), reduction='mean')
             else:
                 # Paraphrase
                 logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='mean') + \
-                        F.cosine_embedding_loss(emb[0], emb[1], b_labels.view(-1), reduction='mean')
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='mean')
         else:
             # Sentiment SST
             b_ids, b_mask, b_labels = (batch['token_ids'],
@@ -290,8 +287,8 @@ def train_multitask(args):
             train_loss += torch.mean(torch.tensor(losses))
             num_batches += 1
             # With batch_size 10, total 14150 batches
-            if num_batches > 200:
-                break
+            # if num_batches > 600:
+            #     break
 
         train_loss = train_loss / (num_batches)
         if epoch % 4 == 0 and epoch > 0:
