@@ -50,7 +50,7 @@ class MultitaskBERT(nn.Module):
         # Pretrain mode does not require updating bert paramters.
         # Pretrained weights from MLM tasks on training dataset
         # self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
-        self.bert = BertModel.from_pretrained('bert-base-uncased', config='bert-base-uncased')
+        self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
         # print(self.bert.bert_layers[0].attention_dense.weight)
         # print(self.bert)
         for param in self.bert.parameters():
@@ -287,8 +287,8 @@ def train_multitask(args):
             train_loss += torch.mean(torch.tensor(losses))
             num_batches += 1
             # With batch_size 10, total 14150 batches
-            # if num_batches > 600:
-            #     break
+            if num_batches > 600:
+                break
 
         train_loss = train_loss / (num_batches)
         if epoch % 4 == 0 and epoch > 0:
