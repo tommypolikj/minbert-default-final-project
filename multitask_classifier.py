@@ -50,7 +50,7 @@ class MultitaskBERT(nn.Module):
         # Pretrain mode does not require updating bert paramters.
         # Pretrained weights from MLM tasks on training dataset
         # self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
-        self.bert = BertModel.from_pretrained('pretrained_weights.pt', config='bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased', config='bert-base-uncased')
         # print(self.bert.bert_layers[0].attention_dense.weight)
         # print(self.bert)
         for param in self.bert.parameters():
@@ -64,7 +64,8 @@ class MultitaskBERT(nn.Module):
         self.pair_dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_linear = nn.Linear(config.hidden_size, 5)
         self.cos_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
-        self.paraphrase_linear = nn.Linear(config.hidden_size * 2, 1)
+        self.paraphrase_linear_one = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.paraphrase_linear_two = nn.Linear(config.hidden_size, 1)
         self.similarity_linear = nn.Linear(config.hidden_size * 2, 1)
         self.smart_weight = config.smart_weight
 
@@ -101,8 +102,9 @@ class MultitaskBERT(nn.Module):
     def predict_paraphrase_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        
-        return torch.squeeze(self.paraphrase_linear(pair_out), dim=1) + self.cos_similarity(out_1, out_2)
+        linear_one_out = torch.squeeze(self.paraphrase_linear_one(pair_out), dim=1)
+        linear_two_out = self.paraphrase_linear_two(linear_one_out)
+        return linear_two_out + self.cos_similarity(out_1, out_2)
     
     def predict_paraphrase(self,
                            input_ids_1, attention_mask_1,
