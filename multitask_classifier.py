@@ -148,6 +148,12 @@ def save_model(model, optimizer, args, config, filepath):
     torch.save(save_info, filepath)
     print(f"save the model to {filepath}")
 
+# Helper function for calculate pearson correlation
+def pearson_corr(x, y):
+    vx = x - torch.mean(x)
+    vy = y - torch.mean(y)
+
+    return torch.sum(vx * vy) / (torch.sqrt(torch.sum(vx ** 2)) * torch.sqrt(torch.sum(vy ** 2)))
 
 ## Currently only trains on sst dataset
 def train_multitask(args):
@@ -185,7 +191,7 @@ def train_multitask(args):
               'hidden_size': 768,
               'data_dir': '.',
               'option': args.option,
-              'smart_weight': 0.05}
+              'smart_weight': 0.5}
 
     config = SimpleNamespace(**config)
 
@@ -217,12 +223,17 @@ def train_multitask(args):
             
             if return_emb: emb = (model(b_ids_1, b_mask_1), model(b_ids_2, b_mask_2))
             if regression:
+                # Similarty sts
                 logits = model.predict_similarity(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
-                loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean')
+                # Adding correlation as loss
+                loss = 1 - pearson_corr(logits, b_labels.view(-1))
+                # loss = F.mse_loss(logits, b_labels.view(-1), reduction='mean')
             else:
+                # Paraphrase
                 logits = model.predict_paraphrase(b_ids_1, b_mask_1, b_ids_2, b_mask_2)
                 loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='mean')
         else:
+            # Sentiment SST
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                         batch['attention_mask'], batch['labels'])
 
@@ -262,8 +273,10 @@ def train_multitask(args):
             sst_forward = forward_prop(sst_batch, return_emb=True, return_logits=True)
             para_forward = forward_prop(para_batch, pair_data=True, return_emb=True, return_logits=True)
             sts_forward = forward_prop(sts_batch, pair_data=True, regression=True, return_emb=True, return_logits=True)
+            # Do not need much regularization on paraphrase
+            # + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits'])
             losses = [sst_forward['loss'] + model.smart_weight * smart_loss_sst(sst_forward['emb'], sst_forward['logits']), 
-                      para_forward['loss'] + model.smart_weight * smart_loss_para(torch.stack(para_forward['emb']), para_forward['logits']),
+                      para_forward['loss'],
                       sts_forward['loss'] + model.smart_weight * smart_loss_sts(torch.stack(sts_forward['emb']), sts_forward['logits'])]
             # losses = [sst_forward['loss'], para_forward['loss'], sts_forward['loss']]  # Without using SMART
             optimizer.pc_backward(losses)
