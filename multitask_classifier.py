@@ -101,9 +101,12 @@ class MultitaskBERT(nn.Module):
     
     def predict_paraphrase_with_emb(self, out_1, out_2):
         pair_out = torch.cat((out_1, out_2), dim=1)
+        print(pair_out.shape)
         # torch.diag(out_1 @ out_2.T)  # Use dot product for paraphrase detection
-        linear_one_out = torch.squeeze(self.paraphrase_linear_one(pair_out), dim=1)
-        linear_two_out = self.paraphrase_linear_two(linear_one_out)
+        linear_one_out = self.paraphrase_linear_one(pair_out)
+        print(linear_one_out.shape)
+        linear_two_out = torch.squeeze(self.paraphrase_linear_two(linear_one_out), dim=1)
+        print(linear_two_out.shape)
         return linear_two_out + self.cos_similarity(out_1, out_2)
     
     def predict_paraphrase(self,
